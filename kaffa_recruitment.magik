@@ -1,0 +1,186 @@
+def_slotted_exemplar(:kaffa_recruitment,
+	{
+		#declaro as variaveis de ambientes que serão utilizados na classe kaffa_recruitment
+		{:xml_file, _unset,:writable},
+		{:dados, _unset,:writable},
+		{:xml_request,"D:\kaffa\xmls_cnpj\"},
+		{:attributes_task, _unset,:writable}
+	
+	}
+)
+$
+
+_method kaffa_recruitment.new()
+	
+	>> _clone.init()
+	
+_endmethod
+$
+
+
+_method kaffa_recruitment.init()
+
+	#inicializo o formulario de dados que receberam os valores para validação do cnpj
+	.dados << property_list.new_with(
+			:cnpj,	_unset,
+			:retorno, _unset)
+			
+	.attributes_task << property_list.new_with(
+			:task_id, _unset,
+			:desc, _unset,
+			:type, _unset,
+			:date, _unset)
+
+	>> _self
+	
+_endmethod
+$
+
+##Question 1
+_method kaffa_recruitment.format_cnpj(code)
+
+	#valido o formato do cnpj apenas para numero
+
+	code << code.substitute_string("/","")
+	code << code.substitute_string(".","")
+	code << code.substitute_string("-","")
+	
+	ok? << _false
+	
+	_if code.size = 14
+	_then
+		write("CNPJ Validado")
+		ok? << _true
+	_else
+		write("CNPJ Invalido")
+		ok? << _false
+	_endif 
+
+	_return ok?
+
+_endmethod 
+$
+
+##Question 2
+_method kaffa_recruitment.validate_cnpj(code)
+
+	.xml_file << code
+			 
+	_try _with
+
+	#Aqui simulo uma chamada da interface PI para validação do cnpj na Receita Federal
+	cmmd_pi_rcfd << code +  system.getenv("RECEITA_FEDERAL_API_KEY") + .xml_file
+	system.do_command(cmmd_pi_rcfd)
+	
+	#Faço tratamento caso a chamada do PI esteja com problemas
+	_when error
+		.dados[:cnpj] << code
+		.dados[:retorno] << "Falha na validação"
+	_endtry 
+	
+	#Leio o xml para obter o resultado a validação do cnpj
+	xmlresponse << simple_xml.read_file(.xml_request + .xml_file + ".xml")
+	
+	_if xmlresponse _isnt _unset _andif 
+		xmlresponse.get_element(:retorno).elements[1] = "OK"
+	_then
+		.dados[:cnpj] << code
+		.dados[:retorno] << "Validado"
+	_else
+		.dados[:cnpj] << code
+		.dados[:retorno] << "Invalido"
+	_endif 
+	
+	_return .dados
+	
+_endmethod
+$
+
+#Question 5
+_method kaffa_recruitment.create_task(desc, type)
+
+
+	db_ora << gis_program_manager.databases(:kaffa_base)
+	
+	task_id << db_ora.user.sql_select("select task_seq.nextval as task_id from dual")
+	
+	.attributes_task[:task_id] << task_id
+	.attributes_task[:desc] << desc
+	.attributes_task[:type] << type
+	.attributes_task[:date] << date_time_now().write_string
+	
+	
+	l_insert <<	"INSERT INTO KAFFA.TASK values ("+
+					.attributes_task.as_simple_vector().join_as_strings(",")+")"
+																		
+	db_ora.user.exec_sql(l_insert)
+	db_ora.commit()
+
+_endmethod
+$
+
+#Question 5
+_method kaffa_recruitment.delete_task(task_id)
+
+	db_ora << gis_program_manager.databases(:kaffa_base)
+
+	l_delete << "DELETE KAFFA.TASK WHERE TASK_ID = " + task_id.write_string
+	db_ora.user.exec_sql(l_delete)
+	db_ora.commit()
+
+_endmethod
+$
+
+
+##Question 6
+_method kaffa_recruitment.get_date_time()
+
+	#show the current date time from a server local
+	write(date_time_now())
+	
+_endmethod
+$
+
+#Question 8
+CREATE SEQUENCE KAFFA."CUSTOMER_SEQ"  MINVALUE 1 MAXVALUE 99999999999 INCREMENT BY 1 START WITH 1 CACHE 50 NOORDER  NOCYCLE ;
+CREATE SEQUENCE KAFFA."PRODUCT_SEQ"  MINVALUE 1 MAXVALUE 99999999999 INCREMENT BY 1 START WITH 1 CACHE 50 NOORDER  NOCYCLE ;
+CREATE SEQUENCE KAFFA."ORDERS_SEQ"  MINVALUE 1 MAXVALUE 99999999999 INCREMENT BY 1 START WITH 1 CACHE 50 NOORDER  NOCYCLE ;
+
+CREATE TABLE KAFFA.CUSTOMER (
+			ID NUMBER NOT NULL,
+			NAME VARCHAR2(32) NOT NULL,
+			CPF NUMBER NOT NULL,
+			RG	NUMBER NOT NULL,
+			ADRRESS VARCHAR2(32)NOT NULL,
+			CITY VARCHAR2(32) NOT NULL,
+			COUNTRY VARCHAR2(32) NOT NULL,
+			TIMESTAMP DATE,
+			CONSTRAINT "PK_CUSTOMER_ID" PRIMARY KEY ("ID")
+			);
+			
+CREATE TABLE KAFFA.PRODUCT (
+			ID NUMBER NOT NULL,
+			NAME VARCHAR2(32) NOT NULL,
+			CATEGORY VARCHAR2(32) NOT NULL,
+			MODEL VARCHAR2(32) NOT NULL,
+			SERIAL_NUMBER VARCHAR2(32) NOT NULL,
+			TIMESTAMP DATE,
+			CONSTRAINT "PK_PRODUCT_ID" PRIMARY KEY ("ID")
+			);
+
+CREATE TABLE KAFFA.ORDERS (
+			ID NUMBER NOT NULL,
+			PRODUCT_ID NUMBER NOT NULL,
+			CUSTOMER_ID NUMBER NOT NULL,
+			NUMBER_ITENS NUMBER NOT NULL,
+			TIMESTAMP DATE,
+			CONSTRAINT "PK_ORDER_ID" PRIMARY KEY ("ID"),
+			CONSTRAINT "FK_PRODUCTORDERS" FOREIGN KEY (PRODUCT_ID) REFERENCES PRODUCT(ID),
+			CONSTRAINT "FK_CUSTOMERORDERS" FOREIGN KEY (CUSTOMER_ID) REFERENCES CUSTOMER(ID)
+			);
+
+			
+
+
+
+
